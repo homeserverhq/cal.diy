@@ -1,0 +1,54 @@
+name: Push CI
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "**/*.md"
+      - "**/*.mdx"
+      - ".vscode/**"
+      - ".github/CODEOWNERS"
+      - "docs/**"
+      - "help/**"
+      - "packages/i18n/locales/**/common.json"
+      - "i18n.lock"
+
+concurrency:
+  group: push-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  type-check:
+    name: Type Checks
+    uses: ./.github/workflows/check-types.yml
+    secrets: inherit
+
+  lint:
+    name: Linters
+    uses: ./.github/workflows/lint.yml
+    secrets: inherit
+
+  unit-test:
+    name: Tests
+    uses: ./.github/workflows/unit-tests.yml
+    secrets: inherit
+
+  api-v2-unit-test:
+    name: Tests
+    uses: ./.github/workflows/api-v2-unit-tests.yml
+    secrets: inherit
+
+  security-audit:
+    name: Security Audit
+    uses: ./.github/workflows/security-audit.yml
+    secrets: inherit
+
+  check-prisma-migrations:
+    name: Check Prisma Migrations
+    uses: ./.github/workflows/check-prisma-migrations.yml
+    secrets: inherit

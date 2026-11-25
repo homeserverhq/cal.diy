@@ -1,10 +1,7 @@
 name: Post release
 on:
+  # Tags are handled exclusively by docker-publish.yml
   workflow_dispatch:
-  push:
-    # Pattern matched against refs/tags
-    tags:
-      - "*"
 
 permissions:
   contents: write

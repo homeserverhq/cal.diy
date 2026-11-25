@@ -11,9 +11,7 @@ env:
   DATABASE_HOST: "database:5432"
 
 on:
-  push:
-    tags:
-      - "v*"
+  # Tags are handled exclusively by docker-publish.yml
   # in case manual trigger is needed
   workflow_dispatch:
     inputs:
