@@ -5,6 +5,9 @@ set -x
 # NOTE: if these values are the same, this will be skipped.
 scripts/replace-placeholder.sh "$BUILT_NEXT_PUBLIC_WEBAPP_URL" "$NEXT_PUBLIC_WEBAPP_URL"
 
+# Replace the statically built VAPID placeholder with the run-time public key
+scripts/replace-placeholder.sh "__CALDIY_VAPID_PUBLIC_KEY__" "${NEXT_PUBLIC_VAPID_PUBLIC_KEY:-}"
+
 scripts/wait-for-it.sh ${DATABASE_HOST} -- echo "database is up"
 npx prisma migrate deploy --schema /calcom/packages/prisma/schema.prisma
 npx ts-node --transpile-only /calcom/scripts/seed-app-store.ts
