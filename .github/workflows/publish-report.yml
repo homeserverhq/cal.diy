@@ -27,6 +27,7 @@ permissions:
   pull-requests: write
 jobs:
   publish-report:
+    if: github.event.repository.fork != true
     runs-on: ubuntu-latest
     continue-on-error: true
     env:

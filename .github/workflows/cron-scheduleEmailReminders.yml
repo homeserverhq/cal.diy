@@ -10,6 +10,7 @@ on:
     - cron: "*/15 * * * *"
 jobs:
   cron-scheduleEmailReminders:
+    if: github.event.repository.fork != true
     env:
       APP_URL: ${{ secrets.APP_URL }}
       CRON_API_KEY: ${{ secrets.CRON_API_KEY }}

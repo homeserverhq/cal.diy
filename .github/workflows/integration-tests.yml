@@ -43,6 +43,7 @@ env:
   TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
 jobs:
   integration:
+    if: github.event.repository.fork != true
     timeout-minutes: 20
     name: Integration
     runs-on: ubuntu-latest

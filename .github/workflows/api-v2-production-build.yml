@@ -12,6 +12,7 @@ env:
 jobs:
   build:
     name: Build API v2
+    if: github.event.repository.fork != true
     permissions:
       contents: read
     runs-on: ubuntu-latest

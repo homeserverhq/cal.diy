@@ -43,6 +43,7 @@ env:
   TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
 jobs:
   e2e-embed:
+    if: github.event.repository.fork != true
     timeout-minutes: 20
     name: E2E Embed Core
     runs-on: ubuntu-latest

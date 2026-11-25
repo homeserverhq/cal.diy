@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   annotate:
-    if: always()
+    if: ${{ github.event.repository.fork != true && always() }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

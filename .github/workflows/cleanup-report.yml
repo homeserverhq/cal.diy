@@ -9,6 +9,7 @@ permissions:
   pull-requests: write
 jobs:
   cleanup-report:
+    if: github.event.repository.fork != true
     runs-on: ubuntu-latest
     steps:
       - name: Generate GitHub App token

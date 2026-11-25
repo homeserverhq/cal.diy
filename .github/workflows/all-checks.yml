@@ -11,72 +11,84 @@ concurrency:
 jobs:
   type-check:
     name: Type check
+    if: github.event.repository.fork != true
     uses: ./.github/workflows/check-types.yml
     secrets: inherit
 
   lint:
     name: Linters
+    if: github.event.repository.fork != true
     uses: ./.github/workflows/lint.yml
     secrets: inherit
 
   unit-test:
     name: Tests
+    if: github.event.repository.fork != true
     uses: ./.github/workflows/unit-tests.yml
     secrets: inherit
 
   api-v2-unit-test:
     name: Tests
+    if: github.event.repository.fork != true
     uses: ./.github/workflows/api-v2-unit-tests.yml
     secrets: inherit
 
   build-api-v2:
     name: Production builds
+    if: github.event.repository.fork != true
     uses: ./.github/workflows/api-v2-production-build.yml
     secrets: inherit
 
   build-atoms:
     name: Production builds
+    if: github.event.repository.fork != true
     uses: ./.github/workflows/atoms-production-build.yml
     secrets: inherit
 
   build:
     name: Production builds
+    if: github.event.repository.fork != true
     uses: ./.github/workflows/production-build-without-database.yml
     secrets: inherit
 
   integration-test:
     name: Tests
     needs: [lint, build, build-api-v2]
+    if: github.event.repository.fork != true
     uses: ./.github/workflows/integration-tests.yml
     secrets: inherit
 
   e2e:
     name: Tests
     needs: [lint, build, build-api-v2]
+    if: github.event.repository.fork != true
     uses: ./.github/workflows/e2e.yml
     secrets: inherit
 
   e2e-app-store:
     name: Tests
     needs: [lint, build, build-api-v2]
+    if: github.event.repository.fork != true
     uses: ./.github/workflows/e2e-app-store.yml
     secrets: inherit
 
   e2e-embed:
     name: Tests
     needs: [lint, build, build-api-v2]
+    if: github.event.repository.fork != true
     uses: ./.github/workflows/e2e-embed.yml
     secrets: inherit
 
   e2e-embed-react:
     name: Tests
     needs: [lint, build, build-api-v2]
+    if: github.event.repository.fork != true
     uses: ./.github/workflows/e2e-embed-react.yml
     secrets: inherit
 
   required:
     needs: [lint, type-check, unit-test, api-v2-unit-test, integration-test, build, build-api-v2, e2e, e2e-embed, e2e-embed-react, e2e-app-store]
-    if: always()
+    if: ${{ github.event.repository.fork != true && always() }}
     runs-on: ubuntu-latest
     steps:
       - name: fail if conditional jobs failed
