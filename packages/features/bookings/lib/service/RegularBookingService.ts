@@ -1,6 +1,7 @@
 import process from "node:process";
 import processExternalId from "@calcom/app-store/_utils/calendars/processExternalId";
 import { getPaymentAppData } from "@calcom/app-store/_utils/payments/getPaymentAppData";
+import { appKeysSchema as calVideoKeysSchema } from "@calcom/app-store/dailyvideo/zod";
 import { metadata as GoogleMeetMetadata } from "@calcom/app-store/googlevideo/_metadata";
 import {
   getLocationValueForDB,
@@ -1201,7 +1202,11 @@ async function handler(
         organizerOrFirstDynamicGroupMemberDefaultLocationUrl = defaultApp?.appLink;
       }
     } else {
-      locationBodyString = "integrations:daily";
+      locationBodyString = await getCalVideoFallbackLocation(deps.prismaClient);
+    }
+
+    if (locationBodyString === OrganizerDefaultConferencingAppType) {
+      locationBodyString = await getCalVideoFallbackLocation(deps.prismaClient);
     }
   }
 
@@ -1268,13 +1273,16 @@ async function handler(
 
   // For static link based video apps, it would have the static URL value instead of it's type(e.g. integrations:campfire_video)
   // This ensures that createMeeting isn't called for static video apps as bookingLocation becomes just a regular value for them.
-  const { bookingLocation, conferenceCredentialId: eventTypeCredentialId } =
+  const { bookingLocation: resolvedBookingLocation, conferenceCredentialId: eventTypeCredentialId } =
     organizerOrFirstDynamicGroupMemberDefaultLocationUrl
       ? {
           bookingLocation: organizerOrFirstDynamicGroupMemberDefaultLocationUrl,
           conferenceCredentialId: undefined,
         }
       : getLocationValueForDB(locationBodyString, eventType.locations);
+
+  // getLocationValueForDB falls back to Cal Video for an empty location, so only apply its result when a location resolved.
+  const bookingLocation = locationBodyString.trim().length === 0 ? "" : resolvedBookingLocation;
 
   // Use per-host credential if available, otherwise fall back to event type credential
   const conferenceCredentialId = eventTypeCredentialId;
@@ -2578,6 +2586,16 @@ async function handler(
       : null,
   };
 }
+
+const getCalVideoFallbackLocation = async (prismaClient: PrismaClient) => {
+  const calVideo = await prismaClient.app.findUnique({
+    where: { slug: "daily-video" },
+    select: { enabled: true, keys: true },
+  });
+  return calVideo?.enabled && calVideoKeysSchema.safeParse(calVideo.keys).success
+    ? "integrations:daily"
+    : "";
+};
 
 /**
  * Takes care of creating/rescheduling non-recurring, non-instant bookings. Such bookings could be TeamBooking, UserBooking, SeatedUserBooking, SeatedTeamBooking, etc.

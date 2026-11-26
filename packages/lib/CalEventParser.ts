@@ -562,6 +562,13 @@ export const getRichDescription = (
 ) => {
   const t = t_ ?? calEvent.organizer.language.translate;
 
+  const location = getLocation({
+    videoCallData: calEvent.videoCallData,
+    additionalInformation: calEvent.additionalInformation,
+    location: calEvent.location,
+    uid: calEvent.uid,
+  });
+
   // Join all parts with single newlines and remove extra whitespace
   const parts = [
     getCancellationReason(t, calEvent.cancellationReason),
@@ -585,12 +592,7 @@ export const getRichDescription = (
       },
       t
     ),
-    `${t("where")}:\n${getLocation({
-      videoCallData: calEvent.videoCallData,
-      additionalInformation: calEvent.additionalInformation,
-      location: calEvent.location,
-      uid: calEvent.uid,
-    })}`,
+    location ? `${t("where")}:\n${location}` : "",
     getDescription(t, calEvent.description),
     getAdditionalNotes(t, calEvent.additionalNotes),
     getUserFieldsResponses(calEvent, t),
