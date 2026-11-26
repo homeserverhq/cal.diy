@@ -20,4 +20,4 @@ scripts/replace-placeholder.sh "__CALDIY_MINUTES_TO_BOOK__" "${NEXT_PUBLIC_MINUT
 scripts/wait-for-it.sh ${DATABASE_HOST} -- echo "database is up"
 npx prisma migrate deploy --schema /calcom/packages/prisma/schema.prisma
 npx ts-node --transpile-only /calcom/scripts/seed-app-store.ts
-yarn start
+yarn start --env-mode=loose
