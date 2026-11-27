@@ -18,6 +18,15 @@ async function handler(req: NextApiRequest) {
   const hostUrl = appKeys.nextcloudTalkHost as string;
   const client_id = appKeys.nextcloudTalkClientId as string;
   const client_secret = appKeys.nextcloudTalkClientSecret as string;
+  if (!hostUrl || !client_id || !client_secret) {
+    return {
+      status: 400,
+      body: {
+        error:
+          "Nextcloud Talk OAuth is not configured. Provision an app-password credential instead of installing through OAuth.",
+      },
+    };
+  }
   const state = encodeOAuthState(req);
 
   const params = {

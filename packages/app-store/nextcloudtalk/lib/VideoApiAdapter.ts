@@ -2,6 +2,7 @@ import { stringify } from "node:querystring";
 import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
 
+import { symmetricDecrypt } from "@calcom/lib/crypto";
 import logger from "@calcom/lib/logger";
 import { safeStringify } from "@calcom/lib/safeStringify";
 import prisma from "@calcom/prisma";
@@ -33,12 +34,118 @@ const nextcloudEventResultSchema = z.object({
   }),
 });
 
-const NextcloudTalkVideoApiAdapter = (credential: CredentialPayload): VideoApiAdapter => {
-  const tokenResponse = oAuthManagerHelper.getTokenObjectFromCredential(credential);
+const nextcloudDeleteRoomResultSchema = z.object({
+  ocs: z
+    .object({
+      meta: z.object({
+        status: z.string(),
+        statuscode: z.number(),
+        message: z.string(),
+      }),
+    })
+    .passthrough(),
+});
 
-  const clientCredentials = getParsedAppKeysFromSlug(config.slug, appKeysSchema);
+type AppPasswordCredential = {
+  authType: "app-password";
+  username: string;
+  password: string;
+  host?: string;
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const getAppPasswordCredential = (credential: CredentialPayload): AppPasswordCredential | null => {
+  const key = credential.key;
+  if (!key) {
+    return null;
+  }
+
+  let parsed: unknown = key;
+  if (typeof key === "string") {
+    const encryptionKey = process.env.CALENDSO_ENCRYPTION_KEY || "";
+    if (!encryptionKey) {
+      throw new Error("CALENDSO_ENCRYPTION_KEY is not set");
+    }
+    parsed = JSON.parse(symmetricDecrypt(key, encryptionKey));
+  }
+
+  if (!isRecord(parsed) || parsed.authType !== "app-password") {
+    return null;
+  }
+  if (typeof parsed.username !== "string" || typeof parsed.password !== "string") {
+    return null;
+  }
+
+  return {
+    authType: "app-password",
+    username: parsed.username,
+    password: parsed.password,
+    host: typeof parsed.host === "string" ? parsed.host : undefined,
+  };
+};
+
+const NextcloudTalkVideoApiAdapter = (credential: CredentialPayload): VideoApiAdapter => {
+  const appPasswordCredential = getAppPasswordCredential(credential);
+  let tokenResponse: ReturnType<typeof oAuthManagerHelper.getTokenObjectFromCredential> | null = null;
+  let clientCredentials: z.infer<typeof appKeysSchema> | null = null;
+
+  const getOAuthClientCredentials = async (): Promise<z.infer<typeof appKeysSchema>> => {
+    if (clientCredentials) {
+      return clientCredentials;
+    }
+    const credentials = await getParsedAppKeysFromSlug(config.slug, appKeysSchema);
+    clientCredentials = credentials;
+    return credentials;
+  };
+
+  const fetchWithAppPassword = async (endpoint: string, options?: RequestInit) => {
+    if (!appPasswordCredential) {
+      throw new Error("Nextcloud Talk app password credential is missing");
+    }
+
+    const appKeys = await getAppKeysFromSlug(config.slug);
+    const host = (appPasswordCredential.host || (appKeys.nextcloudTalkHost as string) || "").replace(
+      /\/+$/,
+      ""
+    );
+    if (!host) {
+      throw new Error("nextcloudTalkHost is not configured");
+    }
+
+    const authorization = `Basic ${Buffer.from(
+      `${appPasswordCredential.username}:${appPasswordCredential.password}`
+    ).toString("base64")}`;
+    const response = await fetch(`${host}/${endpoint}`, {
+      ...options,
+      headers: {
+        ...options?.headers,
+        Authorization: authorization,
+      },
+    });
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      throw new Error(`Nextcloud Talk request failed (${response.status}): ${body}`);
+    }
+
+    return response.json();
+  };
 
   const fetchNextcloudApi = async (endpoint: string, options?: RequestInit) => {
+    if (appPasswordCredential) {
+      return fetchWithAppPassword(endpoint, options);
+    }
+
+    if (!tokenResponse) {
+      tokenResponse = oAuthManagerHelper.getTokenObjectFromCredential(credential);
+    }
+    const currentTokenResponse =
+      tokenResponse ?? oAuthManagerHelper.getTokenObjectFromCredential(credential);
+    tokenResponse = currentTokenResponse;
+    const oAuthClientCredentials = await getOAuthClientCredentials();
+
     const auth = new OAuthManager({
       credentialSyncVariables: oAuthManagerHelper.credentialSyncVariables,
       resourceOwner: {
@@ -46,11 +153,11 @@ const NextcloudTalkVideoApiAdapter = (credential: CredentialPayload): VideoApiAd
         id: credential.userId,
       },
       appSlug: config.slug,
-      currentTokenObject: tokenResponse,
+      currentTokenObject: currentTokenResponse,
       fetchNewTokenObject: async ({ refreshToken }: { refreshToken: string | null }) => {
         const { nextcloudTalkClientId, nextcloudTalkClientSecret, nextcloudTalkHost } =
-          await clientCredentials;
-        if (!refreshToken) {
+          oAuthClientCredentials;
+        if (!refreshToken || !nextcloudTalkClientId || !nextcloudTalkClientSecret) {
           return null;
         }
         const params = {
@@ -109,9 +216,8 @@ const NextcloudTalkVideoApiAdapter = (credential: CredentialPayload): VideoApiAd
       },
     });
 
-    const { nextcloudTalkHost } = await clientCredentials;
     const { json } = await auth.request({
-      url: `${nextcloudTalkHost}/${endpoint}`,
+      url: `${oAuthClientCredentials.nextcloudTalkHost}/${endpoint}`,
       options: {
         method: "GET",
         ...options,
@@ -131,7 +237,10 @@ const NextcloudTalkVideoApiAdapter = (credential: CredentialPayload): VideoApiAd
     createMeeting: async (eventData: CalendarEvent): Promise<VideoCallData> => {
       const appKeys = await getAppKeysFromSlug(config.slug);
       const meetingPattern = (appKeys.nextcloudTalkPattern as string) || "{uuid}";
-      const hostUrl = appKeys.nextcloudTalkHost as string;
+      const hostUrl = ((appKeys.nextcloudTalkHost as string) || "").replace(/\/+$/, "");
+      if (!hostUrl) {
+        throw new Error("nextcloudTalkHost is not configured");
+      }
 
       //Allows "/{Type}-with-{Attendees}" slug
       const meetingID = meetingPattern
@@ -186,7 +295,7 @@ const NextcloudTalkVideoApiAdapter = (credential: CredentialPayload): VideoApiAd
             "OCS-APIRequest": "true",
           },
         });
-        const result = nextcloudEventResultSchema.parse(response);
+        const result = nextcloudDeleteRoomResultSchema.parse(response);
 
         if (result.ocs && result.ocs.meta && result.ocs.meta.status === "ok") {
           return Promise.resolve();

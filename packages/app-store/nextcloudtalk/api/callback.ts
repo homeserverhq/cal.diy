@@ -52,14 +52,35 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return;
   }
 
-  // Remove the previous credential if there were linked ones already
-  await prisma.credential.deleteMany({
+  // Remove previous OAuth credentials, but keep app-password credentials created by provisioning.
+  const existingCredentials = await prisma.credential.findMany({
     where: {
       type: "nextcloudtalk_video",
       userId,
       appId: "nextcloudtalk",
     },
+    select: {
+      id: true,
+      key: true,
+    },
   });
+  const oauthCredentialIds = existingCredentials
+    .filter(({ key }) => {
+      if (!key || typeof key !== "object" || Array.isArray(key)) {
+        return false;
+      }
+      return (key as Record<string, unknown>).authType !== "app-password";
+    })
+    .map(({ id }) => id);
+  if (oauthCredentialIds.length > 0) {
+    await prisma.credential.deleteMany({
+      where: {
+        id: {
+          in: oauthCredentialIds,
+        },
+      },
+    });
+  }
 
   await createOAuthAppCredential({ appId: "nextcloudtalk", type: "nextcloudtalk_video" }, responseBody, req);
 
